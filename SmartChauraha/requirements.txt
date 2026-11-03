@@ -1,0 +1,4 @@
+flask>=2.2
+flask-cors>=3.0      # optional: the backend adds CORS headers itself if this is missing
+numpy>=1.22          # Deep Q-Network
+matplotlib>=3.5      # optional: chart in evaluate.py

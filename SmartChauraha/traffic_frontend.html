@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SmartChauraha — Traffic Signal Management</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #080c10;
+    --bg2:       #0d1420;
+    --bg3:       #111a28;
+    --border:    #1e2d42;
+    --border2:   #243550;
+    --text:      #c8d8ec;
+    --text2:     #6b8ab0;
+    --text3:     #3a5070;
+    --accent:    #00d4ff;
+    --accent2:   #0090cc;
+    --green:     #00ff7f;
+    --green2:    #00cc66;
+    --red:       #ff3355;
+    --red2:      #cc1133;
+    --yellow:    #ffcc00;
+    --yellow2:   #cc9900;
+    --orange:    #ff6600;
+    --purple:    #9966ff;
+    --mono:      'Share Tech Mono', monospace;
+    --sans:      'Barlow', sans-serif;
+    --cond:      'Barlow Condensed', sans-serif;
+    --glow-g:    0 0 20px rgba(0,255,127,0.4);
+    --glow-r:    0 0 20px rgba(255,51,85,0.4);
+    --glow-y:    0 0 20px rgba(255,204,0,0.4);
+    --glow-a:    0 0 20px rgba(0,212,255,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid noise background */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.15;
+    pointer-events: none;
+  }
+
+  #root { position: relative; z-index: 1; }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    background: linear-gradient(180deg, var(--bg2) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .header-logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: conic-gradient(var(--green), var(--yellow), var(--red), var(--green));
+    border-radius: 50%;
+    animation: spin 8s linear infinite;
+    filter: drop-shadow(0 0 8px var(--accent));
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .logo-text {
+    font-family: var(--cond);
+    font-size: 22px; font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 10px; color: var(--text3); letter-spacing: 2px;
+  }
+  .header-status {
+    display: flex; gap: 20px; align-items: center;
+  }
+  .status-pill {
+    font-family: var(--mono); font-size: 11px;
+    padding: 4px 10px; border-radius: 20px;
+    border: 1px solid var(--border2); background: var(--bg3);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pulse-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: var(--glow-g);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .pulse-dot.red { background: var(--red); box-shadow: var(--glow-r); }
+  .pulse-dot.yellow { background: var(--yellow); box-shadow: var(--glow-y); }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  /* ── LAYOUT ── */
+  .app-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr 300px;
+    grid-template-rows: auto 1fr auto;
+    gap: 16px;
+    padding: 16px 20px 20px;
+    min-height: calc(100vh - 65px);
+  }
+
+  /* ── PANEL BASE ── */
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .panel::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+    opacity: 0.5;
+  }
+  .panel-title {
+    font-family: var(--cond); font-size: 11px; font-weight: 600;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text3); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::before {
+    content: ''; width: 3px; height: 12px;
+    background: var(--accent); border-radius: 2px;
+  }
+
+  /* ── INTERSECTION ── */
+  .intersection-wrap {
+    grid-column: 2; grid-row: 1 / 3;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .intersection-canvas {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    position: relative;
+    aspect-ratio: 1;
+    max-height: 480px;
+    overflow: hidden;
+  }
+  .intersection-canvas::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(0,212,255,0.03) 0%, transparent 60%);
+  }
+
+  /* Road grid */
+  .road-h {
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%; transform: translateY(-50%);
+    height: 28%;
+    background: #1a2030;
+    border-top: 2px solid var(--border2);
+    border-bottom: 2px solid var(--border2);
+  }
+  .road-v {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%; transform: translateX(-50%);
+    width: 28%;
+    background: #1a2030;
+    border-left: 2px solid var(--border2);
+    border-right: 2px solid var(--border2);
+  }
+  /* Dashed centre lines */
+  .road-dash-h, .road-dash-v {
+    position: absolute;
+    background: repeating-linear-gradient(
+      90deg, var(--yellow2) 0px, var(--yellow2) 20px, transparent 20px, transparent 40px
+    );
+    opacity: 0.3;
+  }
+  .road-dash-h {
+    top: 50%; left: 0; right: 0;
+    height: 2px; transform: translateY(-50%);
+  }
+  .road-dash-v {
+    left: 50%; top: 0; bottom: 0;
+    width: 2px; transform: translateX(-50%);
+    background: repeating-linear-gradient(
+      180deg, var(--yellow2) 0px, var(--yellow2) 20px, transparent 20px, transparent 40px
+    );
+  }
+
+  /* Junction box */
+  .junction {
+    position: absolute;
+    top: 36%; left: 36%; width: 28%; height: 28%;
+    background: #141e2e;
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+  }
+  .junction-cross {
+    font-family: var(--mono); font-size: 9px;
+    color: var(--text3); letter-spacing: 1px;
+  }
+
+  /* Lane arms */
+  .lane-arm {
+    position: absolute;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px;
+  }
+  .lane-arm.north { top: 3%; left: 50%; transform: translateX(-50%); }
+  .lane-arm.south { bottom: 3%; left: 50%; transform: translateX(-50%); flex-direction: column-reverse; }
+  .lane-arm.east  { right: 3%; top: 50%; transform: translateY(-50%); flex-direction: row-reverse; }
+  .lane-arm.west  { left: 3%; top: 50%; transform: translateY(-50%); flex-direction: row; }
+
+  /* Traffic light signal */
+  .signal-light {
+    width: 44px; height: 110px;
+    background: #0a1220;
+    border: 2px solid var(--border2);
+    border-radius: 8px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-evenly;
+    padding: 6px 0;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    flex-shrink: 0;
+  }
+  .signal-light.horiz {
+    width: 110px; height: 44px;
+    flex-direction: row;
+  }
+  .bulb {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #0d1a26;
+    border: 2px solid #1a2a40;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+  .bulb.active-red    { background: var(--red);    box-shadow: var(--glow-r), inset 0 0 8px rgba(255,255,255,0.2); }
+  .bulb.active-yellow { background: var(--yellow); box-shadow: var(--glow-y), inset 0 0 8px rgba(255,255,255,0.2); }
+  .bulb.active-green  { background: var(--green);  box-shadow: var(--glow-g), inset 0 0 8px rgba(255,255,255,0.2); }
+
+  /* Vehicle dots */
+  .vehicles-area {
+    display: flex; flex-wrap: wrap; gap: 3px;
+    justify-content: center;
+    max-width: 80px;
+  }
+  .vehicle-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 2px;
+    box-shadow: 0 0 4px var(--accent2);
+    animation: carMove 0.5s ease infinite alternate;
+  }
+  @keyframes carMove {
+    from { opacity: 0.7; transform: scale(0.9); }
+    to   { opacity: 1;   transform: scale(1); }
+  }
+  .vehicle-dot.dense  { background: var(--orange); box-shadow: 0 0 4px var(--orange); }
+  .vehicle-dot.sparse { background: var(--accent2); opacity: 0.5; }
+
+  /* Density badge */
+  .density-badge {
+    font-family: var(--mono); font-size: 10px;
+    padding: 2px 7px; border-radius: 10px;
+    font-weight: 600; letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .density-LOW    { background: rgba(0,212,255,0.12); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+  .density-MEDIUM { background: rgba(255,204,0,0.12); color: var(--yellow); border: 1px solid rgba(255,204,0,0.3); }
+  .density-HIGH   { background: rgba(255,51,85,0.12);  color: var(--red);    border: 1px solid rgba(255,51,85,0.3); }
+
+  /* Direction label */
+  .dir-label {
+    font-family: var(--cond); font-size: 12px; font-weight: 700;
+    letter-spacing: 2px; color: var(--text3);
+  }
+
+  /* ── TIMER RING ── */
+  .timer-ring-wrap {
+    position: absolute; top: 44%; left: 44%; width: 12%; height: 12%;
+    transform: translate(-50%, -50%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .timer-svg { width: 100%; height: 100%; }
+  .timer-text {
+    position: absolute;
+    font-family: var(--mono); font-size: clamp(8px, 1.5vw, 14px);
+    font-weight: 700; color: var(--text);
+    text-align: center;
+  }
+
+  /* ── LEFT PANEL: CONTROLS ── */
+  .left-panel { grid-column: 1; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 12px; }
+
+  .mode-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--cond); font-size: 13px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 8px 14px; border-radius: 5px; cursor: pointer;
+    border: 1px solid var(--border2); background: var(--bg3);
+    color: var(--text2); transition: all 0.2s ease;
+  }
+  .btn:hover { border-color: var(--accent2); color: var(--accent); }
+  .btn.active { background: rgba(0,212,255,0.15); border-color: var(--accent); color: var(--accent); box-shadow: var(--glow-a); }
+  .btn.danger { border-color: rgba(255,51,85,0.4); color: var(--red2); }
+  .btn.danger:hover, .btn.danger.active {
+    background: rgba(255,51,85,0.15); border-color: var(--red); color: var(--red); box-shadow: var(--glow-r);
+  }
+  .btn.success { border-color: rgba(0,255,127,0.4); color: var(--green2); }
+  .btn.success:hover, .btn.success.active {
+    background: rgba(0,255,127,0.15); border-color: var(--green); color: var(--green); box-shadow: var(--glow-g);
+  }
+  .btn.full { width: 100%; text-align: center; }
+
+  /* Manual direction buttons */
+  .dir-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* Time of day selector */
+  .tod-pills { display: flex; gap: 8px; }
+  .tod-pill {
+    flex: 1; font-family: var(--cond); font-size: 12px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 7px 4px; border-radius: 5px; text-align: center;
+    cursor: pointer; border: 1px solid var(--border2); background: var(--bg3);
+    color: var(--text2); transition: all 0.2s;
+  }
+  .tod-pill.active-NORMAL { background: rgba(0,212,255,0.1); border-color: var(--accent); color: var(--accent); }
+  .tod-pill.active-PEAK   { background: rgba(255,102,0,0.12); border-color: var(--orange); color: var(--orange); }
+  .tod-pill.active-NIGHT  { background: rgba(153,102,255,0.12); border-color: var(--purple); color: var(--purple); }
+
+  /* Emergency panel */
+  .emergency-select { display: flex; flex-direction: column; gap: 8px; }
+  .emergency-dir-row { display: flex; gap: 6px; align-items: center; }
+  .emergency-dir-select {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border2);
+    color: var(--text); padding: 7px 10px; border-radius: 5px;
+    font-family: var(--mono); font-size: 12px; outline: none;
+    cursor: pointer;
+  }
+  .emergency-active-banner {
+    background: rgba(255,51,85,0.15);
+    border: 1px solid var(--red);
+    border-radius: 6px; padding: 10px 14px;
+    font-family: var(--mono); font-size: 12px; color: var(--red);
+    animation: emergencyFlash 1s ease infinite;
+    display: flex; align-items: center; gap: 8px;
+  }
+  @keyframes emergencyFlash {
+    0%,100% { background: rgba(255,51,85,0.15); }
+    50%      { background: rgba(255,51,85,0.30); }
+  }
+
+  /* ── RIGHT PANEL: DASHBOARD ── */
+  .right-panel { grid-column: 3; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 12px; }
+
+  /* Signal status rows */
+  .signal-rows { display: flex; flex-direction: column; gap: 8px; }
+  .signal-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 12px;
+  }
+  .signal-row.active { border-color: var(--border2); }
+  .signal-row-dir {
+    font-family: var(--cond); font-size: 13px; font-weight: 700;
+    letter-spacing: 2px; color: var(--text2); width: 55px;
+  }
+  .signal-badge {
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    padding: 3px 9px; border-radius: 10px; letter-spacing: 1px;
+  }
+  .sig-GREEN  { background: rgba(0,255,127,0.12); color: var(--green);  border: 1px solid rgba(0,255,127,0.3); }
+  .sig-YELLOW { background: rgba(255,204,0,0.12);  color: var(--yellow); border: 1px solid rgba(255,204,0,0.3); }
+  .sig-RED    { background: rgba(255,51,85,0.12);   color: var(--red);    border: 1px solid rgba(255,51,85,0.3); }
+
+  /* Density bar */
+  .density-bar-wrap {
+    flex: 1; height: 6px; background: var(--bg);
+    border-radius: 3px; overflow: hidden; margin: 0 8px;
+  }
+  .density-bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+
+  /* Stat tiles */
+  .stat-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-tile {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat-label {
+    font-family: var(--mono); font-size: 9px; color: var(--text3);
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .stat-value {
+    font-family: var(--cond); font-size: 28px; font-weight: 900;
+    line-height: 1; color: var(--accent);
+  }
+  .stat-value.green  { color: var(--green); }
+  .stat-value.red    { color: var(--red); }
+  .stat-value.yellow { color: var(--yellow); }
+  .stat-value.orange { color: var(--orange); }
+
+  /* Mini chart */
+  .chart-wrap { width: 100%; }
+  canvas.mini-chart { width: 100% !important; max-height: 120px; }
+
+  /* ── BOTTOM TREND PANEL ── */
+  .bottom-panel {
+    grid-column: 1 / 4;
+    display: grid; grid-template-columns: 1.4fr 1fr;
+    gap: 12px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1100px) {
+    .app-grid { grid-template-columns: 260px 1fr 260px; }
+  }
+  @media (max-width: 860px) {
+    .app-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
+    .intersection-wrap { grid-column: 1; grid-row: auto; }
+    .left-panel, .right-panel { grid-column: 1; grid-row: auto; }
+    .bottom-panel { grid-column: 1; grid-template-columns: 1fr; }
+  }
+
+  /* Connection warning */
+  .conn-warning {
+    position: fixed; bottom: 20px; right: 20px;
+    background: rgba(255,102,0,0.15); border: 1px solid var(--orange);
+    color: var(--orange); font-family: var(--mono); font-size: 12px;
+    padding: 10px 16px; border-radius: 6px; z-index: 9999;
+    max-width: 280px;
+  }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+  .small-text { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+  /* ── density slider ── */
+  input[type=range] {
+    -webkit-appearance: none; width: 100%; height: 4px;
+    border-radius: 2px; background: var(--border2); outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+    box-shadow: var(--glow-a);
+  }
+  .slider-row {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .slider-label {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  /* ── AI insight ── */
+  .ai-insight {
+    background: rgba(0,212,255,0.05);
+    border: 1px solid rgba(0,212,255,0.2);
+    border-radius: 6px; padding: 10px 12px;
+    font-family: var(--mono); font-size: 11px; color: var(--text2);
+    line-height: 1.5;
+  }
+  .ai-insight span { color: var(--accent); }
+
+  /* ── v3: RL panels ── */
+  .ctrl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ctrl-grid .btn { font-size: 11px; padding: 7px 6px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 8px; }
+  .switch {
+    width: 38px; height: 20px; border-radius: 10px; background: var(--bg3);
+    border: 1px solid var(--border2); position: relative; cursor: pointer; flex-shrink: 0;
+  }
+  .switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--text3); transition: all .2s;
+  }
+  .switch.on { border-color: var(--green); background: rgba(0,255,127,0.12); }
+  .switch.on::after { left: 20px; background: var(--green); }
+  .speed-row { display: flex; gap: 4px; }
+  .speed-btn {
+    font-family: var(--mono); font-size: 10px; padding: 3px 7px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--border2); background: var(--bg3); color: var(--text2);
+  }
+  .speed-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  .q-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .q-dir { font-family: var(--cond); font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--text2); width: 46px; }
+  .q-bar-wrap { flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .q-bar { height: 100%; border-radius: 4px; background: var(--accent2); transition: width .4s; }
+  .q-bar.best { background: var(--green); box-shadow: var(--glow-g); }
+  .q-val { font-family: var(--mono); font-size: 10px; color: var(--text3); width: 92px; text-align: right; white-space: nowrap; }
+  .rule-badge {
+    display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 8px;
+    background: rgba(255,204,0,0.12); color: var(--yellow); border: 1px solid rgba(255,204,0,0.3); margin-top: 6px;
+  }
+  .rule-badge.ok { background: rgba(0,255,127,0.08); color: var(--green2); border-color: rgba(0,255,127,0.25); }
+
+  .log-list { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
+  .log-item {
+    font-family: var(--mono); font-size: 10.5px; color: var(--text2); line-height: 1.45;
+    border-left: 2px solid var(--border2); padding: 2px 0 2px 8px;
+  }
+  .log-item b { color: var(--accent); font-weight: 400; }
+  .log-item.rule { border-left-color: var(--yellow); }
+
+  .eval-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .eval-table th { color: var(--text3); font-weight: 400; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .eval-table th:first-child, .eval-table td:first-child { text-align: left; }
+  .eval-table td { padding: 5px 6px; text-align: right; color: var(--text2); border-bottom: 1px solid var(--border); }
+  .eval-table td.best { color: var(--green); }
+  .eval-table tr.rl td:first-child { color: var(--accent); }
+
+  .limits-list { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-family: var(--mono); font-size: 11px; }
+  .limits-list span:nth-child(odd) { color: var(--text3); }
+  .limits-list span:nth-child(even) { color: var(--text); text-align: right; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const API = "http://localhost:5000/api";
+const DIRS = ["NORTH","SOUTH","EAST","WEST"];
+
+// ─── Colour helpers ───────────────────────────────────────────
+function sigColor(sig) {
+  if (sig === "GREEN")  return "var(--green)";
+  if (sig === "YELLOW") return "var(--yellow)";
+  return "var(--red)";
+}
+function densityBarColor(val) {
+  if (val < 30) return "var(--accent)";
+  if (val < 70) return "var(--yellow)";
+  return "var(--red)";
+}
+// Canvas cannot resolve CSS variables, so the sparkline needs real hex values
+function densityHex(val) {
+  if (val < 30) return "#00d4ff";
+  if (val < 70) return "#ffcc00";
+  return "#ff3355";
+}
+const RULE_TEXT = {
+  EMERGENCY_PREEMPTION: "Emergency preemption",
+  MAX_RED_WAIT: "Max red-wait rule",
+  MAX_CONSECUTIVE: "Fairness limit",
+  GREEN_LIMITS: "Green clipped to limits",
+  MANUAL_OVERRIDE: "Officer override",
+};
+const CTRL_TEXT = {
+  RL: "RL agent", PRIORITY: "Priority rule", LEGACY: "Original rule", FIXED: "Fixed time",
+};
+
+// ─── Mini sparkline ───────────────────────────────────────────
+function Sparkline({ data, color }) {
+  const ref = useRef();
+  useEffect(() => {
+    if (!ref.current || !data || data.length < 2) return;
+    const canvas = ref.current;
+    const ctx = canvas.getContext("2d");
+    const W = canvas.offsetWidth; const H = canvas.offsetHeight;
+    canvas.width = W; canvas.height = H;
+    ctx.clearRect(0,0,W,H);
+    const max = 100; const min = 0;
+    const pts = data.map((v, i) => [i / (data.length-1) * W, H - (v - min)/(max - min) * (H - 2) - 1]);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    pts.forEach(([x,y]) => ctx.lineTo(x, y));
+    ctx.strokeStyle = color || "#00d4ff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Fill under
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+    ctx.globalAlpha = 0.13;
+    ctx.fillStyle = color || "#00d4ff";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }, [data, color]);
+  return <canvas ref={ref} className="mini-chart" style={{height:60}}/>;
+}
+
+// ─── RL decision panel: Q-value per direction ─────────────────
+function DecisionPanel({ state }) {
+  const { decision, rl, controller, priority } = state;
+  const isRL = controller === "RL";
+  let rows = [];
+  if (isRL && rl.q_values && rl.loaded) {
+    const vals = DIRS.map(d => rl.q_values[d]?.q ?? 0);
+    const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
+    rows = DIRS.map(d => ({
+      d, pct: 15 + 85 * ((rl.q_values[d]?.q ?? lo) - lo) / span,
+      label: `Q ${(rl.q_values[d]?.q ?? 0).toFixed(1)} · ${rl.q_values[d]?.green ?? "-"}s`,
+      best: (rl.q_values[d]?.q ?? -1e9) === hi,
+    }));
+  } else if (priority) {
+    const hi = Math.max(...DIRS.map(d => priority[d].score));
+    rows = DIRS.map(d => ({ d, pct: 100 * priority[d].score / (hi || 1),
+      label: `P ${priority[d].score.toFixed(2)}`, best: priority[d].score === hi }));
+  }
+  const rule = decision?.safety_rule;
+  return (
+    <div className="panel">
+      <div className="panel-title">{isRL ? "RL Decision · Q-values" : "Decision Scores"}</div>
+      {rows.length === 0 && <div className="small-text">
+        {isRL && !rl.loaded ? "No trained model found — run python train_rl.py. Decisions use the priority rule as fallback." : "Waiting for first decision…"}
+      </div>}
+      {rows.map(r => (
+        <div className="q-row" key={r.d}>
+          <span className="q-dir">{r.d.slice(0,1) + r.d.slice(1,5).toLowerCase()}</span>
+          <div className="q-bar-wrap"><div className={`q-bar ${r.best ? "best" : ""}`} style={{width:`${r.pct}%`}}/></div>
+          <span className="q-val">{r.label}</span>
+        </div>
+      ))}
+      {isRL && <div className="small-text" style={{marginTop:4}}>
+        Q = −(expected future delay), so closer to 0 is better. Model: {rl.model.toUpperCase()}
+        {rl.loaded ? ` · ${rl.episodes} training episodes` : " · NOT TRAINED (using priority fallback)"}
+      </div>}
+      {decision?.direction && (
+        <div style={{marginTop:10}}>
+          <div style={{fontFamily:"var(--cond)",fontSize:18,fontWeight:700,color:"var(--green)",letterSpacing:1}}>
+            {decision.direction} · {decision.green}s
+          </div>
+          <span className={`rule-badge ${rule ? "" : "ok"}`}>
+            {rule ? `⚠ ${RULE_TEXT[rule] || rule} (proposed ${decision.proposed?.direction})` : "✓ passed safety checks"}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Evaluation table (from python evaluate.py) ───────────────
+function EvaluationTable({ rows }) {
+  if (!rows || !rows.length) return (
+    <div className="small-text">Run <span style={{color:"var(--accent)"}}>python evaluate.py</span> and restart the backend to see the offline comparison here.</div>
+  );
+  const ctrls = [...new Set(rows.map(r => r.controller))];
+  const tods = ["PEAK","NORMAL","NIGHT"];
+  const get = (c,t) => rows.find(r => r.controller === c && r.time_of_day === t);
+  const best = t => Math.min(...ctrls.map(c => get(c,t).avg_wait));
+  return (
+    <table className="eval-table">
+      <thead><tr><th>Avg wait (s)</th>{tods.map(t => <th key={t}>{t}</th>)}</tr></thead>
+      <tbody>
+        {ctrls.map(c => (
+          <tr key={c} className={c.startsWith("RL") ? "rl" : ""}>
+            <td>{c}</td>
+            {tods.map(t => { const v = get(c,t).avg_wait;
+              return <td key={t} className={v === best(t) ? "best" : ""}>{v.toFixed(1)}</td>; })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// ─── Timer Ring SVG ───────────────────────────────────────────
+function TimerRing({ timer, max, color, held }) {
+  if (held) { timer = max; }
+  const r = 20, circ = 2 * Math.PI * r;
+  const pct = max > 0 ? timer / max : 0;
+  const dash = pct * circ;
+  return (
+    <div className="timer-ring-wrap">
+      <svg className="timer-svg" viewBox="0 0 50 50">
+        <circle cx="25" cy="25" r={r} fill="none" stroke="#1a2a3a" strokeWidth="4"/>
+        <circle cx="25" cy="25" r={r} fill="none"
+          stroke={color || "var(--accent)"} strokeWidth="4"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          transform="rotate(-90 25 25)"
+          style={{transition:"stroke-dasharray 0.8s linear", filter:`drop-shadow(0 0 4px ${color})`}}
+        />
+      </svg>
+      <div className="timer-text">{held ? "HOLD" : `${timer}s`}</div>
+    </div>
+  );
+}
+
+// ─── Vehicle dots ─────────────────────────────────────────────
+function VehicleDots({ count, density }) {
+  const cls = density > 70 ? "dense" : density < 30 ? "sparse" : "";
+  return (
+    <div className="vehicles-area">
+      {Array.from({length: Math.min(count,12)}).map((_,i) =>
+        <div key={i} className={`vehicle-dot ${cls}`}
+          style={{animationDelay:`${i*0.05}s`}}/>
+      )}
+    </div>
+  );
+}
+
+// ─── Lane Arm (signal + cars) ─────────────────────────────────
+function LaneArm({ dir, signal, density, vehicleCount, isActive }) {
+  const lDir = dir.toLowerCase();
+  const horiz = dir === "EAST" || dir === "WEST";
+  const labels = horiz
+    ? ["RED","YELLOW","GREEN"]
+    : ["RED","YELLOW","GREEN"];
+  // For WEST/SOUTH, reverse so traffic light reads correctly
+  const orderedLabels = (dir === "WEST" || dir === "SOUTH")
+    ? ["GREEN","YELLOW","RED"] : labels;
+
+  return (
+    <div className={`lane-arm ${lDir}`}>
+      <div className="dir-label">{dir.charAt(0)}</div>
+      <div className={`signal-light ${horiz ? "horiz" : ""}`}>
+        {orderedLabels.map(l => (
+          <div key={l} className={`bulb ${signal === l ? "active-"+l.toLowerCase() : ""}`}/>
+        ))}
+      </div>
+      <VehicleDots count={vehicleCount} density={density}/>
+      <div className={`density-badge density-${density > 70 ? "HIGH" : density > 30 ? "MEDIUM" : "LOW"}`}>
+        {density}%
+      </div>
+    </div>
+  );
+}
+
+// ─── Intersection Canvas ──────────────────────────────────────
+function Intersection({ signals, density, vehicleCount, timer, maxTimer, phase, held }) {
+  const timerColor = phase === "GREEN" ? "var(--green)" : phase === "YELLOW" ? "var(--yellow)" : "var(--red)";
+  return (
+    <div className="intersection-canvas">
+      <div className="road-h"/>
+      <div className="road-v"/>
+      <div className="road-dash-h"/>
+      <div className="road-dash-v"/>
+      <div className="junction">
+        <span className="junction-cross">⊕ NODE-01</span>
+      </div>
+
+      {DIRS.map(d => (
+        <LaneArm key={d}
+          dir={d}
+          signal={signals[d]}
+          density={density[d]}
+          vehicleCount={vehicleCount[d]}
+          isActive={signals[d] === "GREEN"}
+        />
+      ))}
+
+      <TimerRing timer={timer} max={maxTimer} color={timerColor} held={held}/>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────
+function App() {
+  const [state, setState] = useState(null);
+  const [connected, setConnected] = useState(true);
+  const [emergDir, setEmergDir] = useState("NORTH");
+  const [histMap, setHistMap] = useState({NORTH:[],SOUTH:[],EAST:[],WEST:[]});
+
+  // Poll backend every 800ms
+  const fetchState = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/state`);
+      const data = await res.json();
+      setState(data);
+      setConnected(true);
+      // Build history map from returned history
+      const hm = {NORTH:[],SOUTH:[],EAST:[],WEST:[]};
+      (data.history || []).forEach(e => {
+        DIRS.forEach(d => hm[d].push(e[d] || 0));
+      });
+      setHistMap(hm);
+    } catch {
+      setConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchState();
+    const iv = setInterval(fetchState, 900);
+    return () => clearInterval(iv);
+  }, [fetchState]);
+
+  const post = async (path, body) => {
+    try {
+      await fetch(`${API}${path}`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body)
+      });
+      await fetchState();
+    } catch { setConnected(false); }
+  };
+
+  if (!state) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"var(--mono)",color:"var(--accent)"}}>
+      INITIALISING SYSTEM...
+    </div>
+  );
+
+  const { signals, density, vehicle_count, active_direction, phase, timer, max_timer, emergency, cycle_count, mode, time_of_day,
+          controller, controllers, rl, metrics, decision, decisions, avg_wait, red_wait, held, speed, limits, evaluation } = state;
+  const emergActive = emergency?.active;
+  const emergPending = emergActive && !(held && active_direction === emergency.direction);
+
+  // AI insight text — straight from the decision engine's explanation
+  const insightText = emergActive
+    ? (emergPending
+        ? `⚠ EMERGENCY — clearing junction safely (yellow → all-red) before ${emergency.direction} goes green`
+        : `⚠ EMERGENCY OVERRIDE — ${emergency.direction} held green`)
+    : mode === "MANUAL"
+    ? `👮 MANUAL CONTROL — officer override on ${active_direction}`
+    : (decision?.reason ? `🤖 ${decision.reason}` : "🤖 Waiting for first decision…");
+
+  return (
+    <div>
+      {/* Header */}
+      <header className="header">
+        <div className="header-logo">
+          <div className="logo-icon"/>
+          <div>
+            <div className="logo-text">SMARTCHAURAHA</div>
+            <div className="logo-sub">RL-OPTIMISED TRAFFIC MANAGEMENT SYSTEM v3.0</div>
+          </div>
+        </div>
+        <div className="header-status">
+          <div className="status-pill">
+            <div className={`pulse-dot ${emergActive?"red":""}`}/>
+            {emergActive ? "EMERGENCY" : "LIVE"}
+          </div>
+          <div className="status-pill">
+            <span style={{color:"var(--text3)"}}>MODE</span>&nbsp;
+            <span style={{color:"var(--accent)",fontFamily:"var(--mono)"}}>{mode}</span>
+          </div>
+          <div className="status-pill">
+            <span style={{color:"var(--text3)"}}>LOGIC</span>&nbsp;
+            <span style={{color:controller==="RL"?"var(--green)":"var(--accent)",fontFamily:"var(--mono)"}}>{CTRL_TEXT[controller]}</span>
+          </div>
+          <div className="status-pill">
+            <span style={{color:"var(--text3)"}}>CYCLE</span>&nbsp;
+            <span style={{color:"var(--accent)",fontFamily:"var(--mono)"}}>{cycle_count}</span>
+          </div>
+          <div className="status-pill">
+            <span style={{color:time_of_day==="PEAK"?"var(--orange)":time_of_day==="NIGHT"?"var(--purple)":"var(--accent)",fontFamily:"var(--mono)"}}>
+              {time_of_day}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <div className="app-grid">
+        {/* ── LEFT PANEL ── */}
+        <div className="left-panel">
+          {/* Mode */}
+          <div className="panel">
+            <div className="panel-title">Control Mode</div>
+            <div className="mode-buttons">
+              <button className={`btn ${mode==="AUTO"?"active":""}`}
+                onClick={() => post("/mode",{mode:"AUTO"})}>AUTO</button>
+              <button className={`btn ${mode==="MANUAL"?"active":""}`}
+                onClick={() => post("/mode",{mode:"MANUAL"})}>MANUAL</button>
+            </div>
+          </div>
+
+          {/* Signal logic (controller) */}
+          <div className="panel">
+            <div className="panel-title">Signal Logic</div>
+            <div className="ctrl-grid">
+              {(controllers || ["RL","PRIORITY","LEGACY","FIXED"]).map(c => (
+                <button key={c} className={`btn ${controller===c ? (c==="RL" ? "success active" : "active") : ""}`}
+                  onClick={() => post("/controller",{controller:c})}>
+                  {c === "RL" ? "🧠 " : ""}{CTRL_TEXT[c]}
+                </button>
+              ))}
+            </div>
+            <div className="toggle-row">
+              <span className="small-text">Online learning (agent keeps training on live traffic)</span>
+              <div className={`switch ${rl.learning ? "on" : ""}`}
+                onClick={() => post("/rl/learning",{enabled: !rl.learning})}/>
+            </div>
+            <div className="toggle-row">
+              <span className="small-text">Simulation speed</span>
+              <div className="speed-row">
+                {[1,2,5,10].map(s => (
+                  <span key={s} className={`speed-btn ${speed===s?"active":""}`}
+                    onClick={() => post("/speed",{speed:s})}>{s}×</span>
+                ))}
+              </div>
+            </div>
+            <div className="small-text" style={{marginTop:8}}>
+              Switching logic resets the live metrics so each controller is measured fairly.
+            </div>
+          </div>
+
+          {/* Manual override */}
+          {mode === "MANUAL" && (
+            <div className="panel">
+              <div className="panel-title">Police Override</div>
+              <div className="dir-grid">
+                {DIRS.map(d => (
+                  <button key={d}
+                    className={`btn ${signals[d]==="GREEN"?"success":""}`}
+                    onClick={() => post("/manual_signal",{direction:d})}>
+                    {d.charAt(0)+d.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Density sliders */}
+          <div className="panel">
+            <div className="panel-title">Queue Override</div>
+            {DIRS.map(d => (
+              <div className="slider-row" key={d} style={{marginBottom:10}}>
+                <div className="slider-label">
+                  <span style={{fontFamily:"var(--cond)",fontSize:12,fontWeight:700,color:"var(--text2)",letterSpacing:1}}>{d}</span>
+                  <span style={{fontFamily:"var(--mono)",fontSize:11,color:densityBarColor(density[d])}}>{vehicle_count[d]} veh · {density[d]}%</span>
+                </div>
+                <input type="range" min="0" max="100"
+                  value={density[d]}
+                  onChange={e => post("/density",{direction:d, value:parseInt(e.target.value)})}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Time of Day */}
+          <div className="panel">
+            <div className="panel-title">Time of Day</div>
+            <div className="tod-pills">
+              {["PEAK","NORMAL","NIGHT"].map(t => (
+                <div key={t}
+                  className={`tod-pill ${time_of_day===t?"active-"+t:""}`}
+                  onClick={() => post("/time_of_day",{time_of_day:t})}>
+                  {t==="PEAK"?"🌅 Peak":t==="NORMAL"?"☀ Normal":"🌙 Night"}
+                </div>
+              ))}
+            </div>
+            <div className="small-text" style={{marginTop:8}}>
+              Changes vehicle arrival rates — the signal logic adapts green times itself
+            </div>
+          </div>
+
+          {/* Emergency */}
+          <div className="panel">
+            <div className="panel-title">Emergency Override</div>
+            {emergActive && (
+              <div className="emergency-active-banner" style={{marginBottom:10}}>
+                <div className="pulse-dot red"/>
+                🚨 EMERGENCY — {emergency.direction}
+              </div>
+            )}
+            <div className="emergency-select">
+              <div className="emergency-dir-row">
+                <select className="emergency-dir-select"
+                  value={emergDir}
+                  onChange={e => setEmergDir(e.target.value)}
+                  disabled={emergActive}>
+                  {DIRS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              {!emergActive ? (
+                <button className="btn danger full"
+                  onClick={() => post("/emergency",{active:true, direction:emergDir})}>
+                  🚨 Activate Emergency
+                </button>
+              ) : (
+                <button className="btn success full"
+                  onClick={() => post("/emergency",{active:false})}>
+                  ✓ Clear Emergency
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* AI Insight */}
+          <div className="ai-insight">
+            <div style={{fontFamily:"var(--cond)",fontSize:11,fontWeight:700,color:"var(--accent)",letterSpacing:2,marginBottom:6}}>AI INSIGHT</div>
+            {insightText}
+          </div>
+        </div>
+
+        {/* ── INTERSECTION ── */}
+        <div className="intersection-wrap">
+          <Intersection
+            signals={signals}
+            density={density}
+            vehicleCount={vehicle_count}
+            timer={timer}
+            maxTimer={max_timer}
+            phase={phase}
+            held={held}
+          />
+          <div className="panel">
+            <div className="panel-title">Decision Log</div>
+            <div className="log-list">
+              {(decisions || []).length === 0 && <div className="small-text">No decisions yet.</div>}
+              {(decisions || []).map((d,i) => (
+                <div key={d.t + "-" + i} className={`log-item ${d.safety_rule ? "rule" : ""}`}>
+                  <b>t={d.t}s</b> [{CTRL_TEXT[d.controller]}] {d.reason}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL: DASHBOARD ── */}
+        <div className="right-panel">
+          <DecisionPanel state={state}/>
+
+          {/* Live performance of the active controller */}
+          <div className="panel">
+            <div className="panel-title">Performance · {CTRL_TEXT[controller]}</div>
+            <div className="stat-tiles">
+              <div className="stat-tile">
+                <div className="stat-label">AVG WAIT</div>
+                <div className="stat-value green">{metrics.avg_wait.toFixed(1)}s</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-label">MAX WAIT</div>
+                <div className="stat-value yellow">{metrics.max_wait}s</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-label">VEHICLES SERVED</div>
+                <div className="stat-value">{metrics.throughput}</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-label">MEASURED FOR</div>
+                <div className="stat-value" style={{fontSize:20}}>{Math.floor(metrics.window_s/60)}m {metrics.window_s%60}s</div>
+              </div>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+              <span className="small-text">Last reward: {rl.last_reward}</span>
+              <span className="speed-btn" onClick={() => post("/metrics/reset",{})}>reset</span>
+            </div>
+          </div>
+
+          {/* Signal status */}
+          <div className="panel">
+            <div className="panel-title">Signal Status</div>
+            <div className="signal-rows">
+              {DIRS.map(d => (
+                <div key={d} className={`signal-row ${signals[d]==="GREEN"?"active":""}`}>
+                  <div className="signal-row-dir">{d.charAt(0)+d.slice(1,3).toLowerCase()}</div>
+                  <div className="density-bar-wrap">
+                    <div className="density-bar-fill"
+                      style={{width:`${density[d]}%`, background:densityBarColor(density[d])}}/>
+                  </div>
+                  <div className={`signal-badge sig-${signals[d]}`}>{signals[d]}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Stat tiles */}
+          <div className="panel">
+            <div className="panel-title">System Metrics</div>
+            <div className="stat-tiles">
+              <div className="stat-tile">
+                <div className="stat-label">ACTIVE DIR</div>
+                <div className="stat-value" style={{fontSize:20,letterSpacing:2}}>{active_direction.slice(0,1)}</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-label">TIMER</div>
+                <div className={`stat-value ${phase==="GREEN"?"green":phase==="YELLOW"?"yellow":"red"}`}>{timer}s</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-label">PHASE</div>
+                <div className={`stat-value ${phase==="GREEN"?"green":phase==="YELLOW"?"yellow":"red"}`} style={{fontSize:14,letterSpacing:1}}>
+                  {phase.replace("_"," ")}
+                </div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-label">TOTAL VEH</div>
+                <div className="stat-value orange">{DIRS.reduce((a,d)=>a+vehicle_count[d],0)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Vehicle counts */}
+          <div className="panel">
+            <div className="panel-title">Vehicle Queue</div>
+            {DIRS.map(d => (
+              <div key={d} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontFamily:"var(--cond)",fontSize:13,fontWeight:700,color:"var(--text2)",letterSpacing:1,width:55}}>{d}</span>
+                <div style={{display:"flex",gap:3,flex:1}}>
+                  {Array.from({length:Math.min(vehicle_count[d],10)}).map((_,i)=>(
+                    <div key={i} style={{width:8,height:8,borderRadius:2,background:sigColor(signals[d]),
+                      boxShadow:`0 0 4px ${sigColor(signals[d])}`,opacity:0.85}}/>
+                  ))}
+                </div>
+                <span style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--text3)",textAlign:"right",width:78}}>
+                  {vehicle_count[d]} · {Math.round(avg_wait[d])}s
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Sparklines */}
+          <div className="panel">
+            <div className="panel-title">Density Trend (30s)</div>
+            {DIRS.map(d => (
+              <div key={d} style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                  <span style={{fontFamily:"var(--cond)",fontSize:11,color:"var(--text3)",letterSpacing:1}}>{d}</span>
+                  <span style={{fontFamily:"var(--mono)",fontSize:10,color:densityBarColor(density[d])}}>{density[d]}%</span>
+                </div>
+                <Sparkline data={histMap[d]} color={densityHex(density[d])}/>
+              </div>
+            ))}
+          </div>
+
+          <div className="panel">
+            <div className="panel-title">Emergency Status</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div className={`pulse-dot ${emergActive?"red":""}`}
+                style={{width:12,height:12,flexShrink:0}}/>
+              <div>
+                <div style={{fontFamily:"var(--cond)",fontSize:16,fontWeight:700,
+                  color:emergActive?"var(--red)":"var(--green)",letterSpacing:1}}>
+                  {emergActive?"ACTIVE":"INACTIVE"}
+                </div>
+                {emergActive && <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--text3)"}}>
+                  Direction: {emergency.direction}
+                </div>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── BOTTOM: decision log · offline evaluation · safety rules ── */}
+        <div className="bottom-panel">
+          <div className="panel">
+            <div className="panel-title">Offline Evaluation · same traffic for all</div>
+            <EvaluationTable rows={evaluation}/>
+          </div>
+          <div className="panel">
+            <div className="panel-title">Safety Layer · cannot be overridden by RL</div>
+            <div className="limits-list">
+              <span>Minimum green</span><span>{limits.min_green}s</span>
+              <span>Maximum green per decision</span><span>{limits.max_green}s</span>
+              <span>Yellow (every switch)</span><span>{limits.yellow}s</span>
+              <span>All-red clearance</span><span>{limits.all_red}s</span>
+              <span>Max red wait before forced service</span><span>{limits.max_red_wait}s</span>
+              <span>Emergency</span><span>safe preemption</span>
+              <span>Conflicting greens</span><span>never</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!connected && (
+        <div className="conn-warning">
+          ⚠ Cannot reach backend (localhost:5000). Run traffic_backend.py first.
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

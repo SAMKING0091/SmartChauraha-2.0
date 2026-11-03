@@ -1,0 +1,19 @@
+controller,key,time_of_day,avg_wait,max_wait,throughput,left_in_queue
+Fixed-time (20 s round robin),FIXED,PEAK,168.23,399,2351.8,155.2
+Fixed-time (20 s round robin),FIXED,NORMAL,46.51,225,1942.5,31.9
+Fixed-time (20 s round robin),FIXED,NIGHT,34.6,81,813.4,11.2
+Original SmartChauraha rule,LEGACY,PEAK,55.46,310,2627.7,45.6
+Original SmartChauraha rule,LEGACY,NORMAL,26.82,125,1959.1,15.3
+Original SmartChauraha rule,LEGACY,NIGHT,18.55,111,819.3,5.3
+Weighted priority + clearance,PRIORITY,PEAK,57.64,397,2609.0,54.2
+Weighted priority + clearance,PRIORITY,NORMAL,27.12,106,1958.0,16.4
+Weighted priority + clearance,PRIORITY,NIGHT,19.91,65,819.8,4.9
+RL - tabular Q-learning,RL_tabular,PEAK,58.96,508,2612.3,53.0
+RL - tabular Q-learning,RL_tabular,NORMAL,33.55,137,1953.7,20.7
+RL - tabular Q-learning,RL_tabular,NIGHT,26.71,116,817.9,6.8
+RL - linear Q-learning,RL_linear,PEAK,47.75,189,2637.6,36.1
+RL - linear Q-learning,RL_linear,NORMAL,27.63,104,1958.0,16.4
+RL - linear Q-learning,RL_linear,NIGHT,21.59,81,819.5,5.2
+RL - Deep Q-Network,RL_dqn,PEAK,44.84,244,2640.4,33.2
+RL - Deep Q-Network,RL_dqn,NORMAL,25.62,100,1958.2,16.1
+RL - Deep Q-Network,RL_dqn,NIGHT,18.93,94,820.0,4.6
